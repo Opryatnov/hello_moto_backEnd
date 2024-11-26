@@ -217,7 +217,7 @@ func main() {
 	http.HandleFunc("/categories", fetchAndSaveCategories)
 
 	// Запуск HTTP-сервера
-	port := 8180
+	port := 8181
 	fmt.Printf("Server is running on HTTP port %d...\n", port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", port), nil))
 }
@@ -229,10 +229,13 @@ func getMotorcycleBrands(w http.ResponseWriter, r *http.Request) {
 
 	collection = client.Database("moto").Collection("brands")
 
+	fmt.Printf("collection", collection)
+
 	// Получаем все документы из коллекции
 	cur, err := collection.Find(context.TODO(), bson.D{})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		fmt.Printf("Получаем все документы из коллекции Error", err)
 		return
 	}
 	defer cur.Close(context.TODO())
@@ -242,10 +245,13 @@ func getMotorcycleBrands(w http.ResponseWriter, r *http.Request) {
 		err := cur.Decode(&brand)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			fmt.Printf("----- for cycle Error", err)
 			return
 		}
 		brands = append(brands, brand)
 	}
+
+	fmt.Printf("brands", brands)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(brands)

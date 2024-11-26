@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -226,35 +227,67 @@ func main() {
 
 // Получение списка марок
 func getMotorcycleBrands(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("method is called")
+	fmt.Println("Method is called")
 	var brands []MotoBrand
 
-	collection = client.Database("moto").Collection("brands")
+	// Подключение к коллекции MongoDB
+	collection := client.Database("moto").Collection("brands")
 
-	fmt.Printf("collection", collection)
-
-	// Получаем все документы из коллекции
+	// Попытка получить данные из коллекции
 	cur, err := collection.Find(context.TODO(), bson.D{})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		fmt.Printf("Получаем все документы из коллекции Error", err)
+		http.Error(w, "Database query failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer cur.Close(context.TODO())
 
+	// Чтение данных из базы
 	for cur.Next(context.TODO()) {
 		var brand MotoBrand
 		err := cur.Decode(&brand)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			fmt.Printf("----- for cycle Error", err)
+			http.Error(w, "Error decoding document: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 		brands = append(brands, brand)
 	}
 
-	fmt.Printf("brands", brands)
+	// Если данные найдены в базе, возвращаем их
+	if len(brands) > 0 {
+		fmt.Println("Brands fetched from database:", brands)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(brands)
+		return
+	}
 
+	// Если данных нет в базе, читаем их из файла JSON
+	fmt.Println("No brands found in database, loading from JSON")
+	filePath := "data/brands.json"
+	file, err := os.Open(filePath)
+	if err != nil {
+		http.Error(w, "Error opening JSON file: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer file.Close()
+
+	err = json.NewDecoder(file).Decode(&brands)
+	if err != nil {
+		http.Error(w, "Error decoding JSON file: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Запись данных в базу
+	for _, brand := range brands {
+		_, err := collection.InsertOne(context.TODO(), brand)
+		if err != nil {
+			http.Error(w, "Error inserting data into database: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	fmt.Println("Brands loaded from JSON and inserted into database:", brands)
+
+	// Возвращаем данные клиенту
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(brands)
 }

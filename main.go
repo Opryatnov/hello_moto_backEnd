@@ -217,7 +217,7 @@ func main() {
 	http.HandleFunc("/categories", fetchAndSaveCategories)
 
 	// Запуск HTTP-сервера
-	port := 8080
+	port := 8180
 	fmt.Printf("Server is running on HTTP port %d...\n", port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", port), nil))
 }

@@ -174,7 +174,9 @@ var client *mongo.Client
 func main() {
 	// Устанавливаем подключение к MongoDB
 	var err error
-	client, err = mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:27017"))
+	// client, err = mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:27017"))
+	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://93.183.81.91:27017"))
+
 	if err != nil {
 		log.Fatal("Failed to create MongoDB client:", err)
 	}

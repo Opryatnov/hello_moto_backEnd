@@ -34,11 +34,6 @@ type MotoBrand struct {
 	ID   string `json:"id"`
 }
 
-type Categories struct {
-	Name string `json:"name"`
-	ID   string `json:"id"`
-}
-
 type MotoModel struct {
 	// ID        primitive.ObjectID `bson:"_id,omitempy" json:"-"`
 	Moto_ID   int    `bson:"id" json:"id"`
@@ -215,7 +210,9 @@ func main() {
 		getImageByArticleID(w, r, externalAPIClient)
 	})
 
-	http.HandleFunc("/categories", fetchAndSaveCategories)
+	http.HandleFunc("/categories", func(w http.ResponseWriter, r *http.Request) {
+		getMotorcycleCategories(w, r, externalAPIClient)
+	})
 
 	// Запуск HTTPS-сервера
 	port := 8181
@@ -835,116 +832,83 @@ func getImageByArticleID(w http.ResponseWriter, r *http.Request, apiClient *serv
 	json.NewEncoder(w).Encode(motoImage)
 }
 
-// func getMotorcycleCategories(w http.ResponseWriter, r *http.Request) {
-// 	if client == nil {
-// 		http.Error(w, "MongoDB connection is not initialized", http.StatusInternalServerError)
-// 		fmt.Println("Error MongoDB NOT connected")
-// 		return
-// 	}
-
-// 	// Работа с MongoDB
-// 	fmt.Println("MongoDB is connected")
-// 	modelsCollection := client.Database("moto").Collection("categories")
-
-// 	// Используем пустой фильтр для выборки всех документов
-// 	cursor, err := modelsCollection.Find(context.Background(), bson.M{})
-// 	if err != nil {
-// 		http.Error(w, err.Error(), http.StatusInternalServerError)
-// 		return
-// 	}
-// 	defer cursor.Close(context.Background())
-
-// 	var models []Categories
-// 	for cursor.Next(context.Background()) {
-// 		var model Categories
-// 		if err := cursor.Decode(&model); err != nil {
-// 			http.Error(w, err.Error(), http.StatusInternalServerError)
-// 			return
-// 		}
-// 		models = append(models, model)
-// 	}
-
-// 	// Если модели найдены в базе данных, возвращаем их
-// 	if len(models) > 0 {
-// 		w.Header().Set("Content-Type", "application/json")
-// 		json.NewEncoder(w).Encode(models)
-// 		fmt.Println("Found models in DB", len(models))
-// 		return
-// 	}
-
-// 	// Если моделей нет, можно добавить дополнительную логику (например, запросить их через внешний API)
-// 	fmt.Println("Models not found in DB.")
-
-// 	w.Header().Set("Content-Type", "application/json")
-// 	json.NewEncoder(w).Encode(models)
-// }
-
-// // func fetchMotorcycleCategories
-
-func fetchAndSaveCategories(w http.ResponseWriter, r *http.Request) {
+func getMotorcycleCategories(w http.ResponseWriter, r *http.Request, apiClient *services.ExternalAPIClient) {
 	if client == nil {
 		http.Error(w, "MongoDB connection is not initialized", http.StatusInternalServerError)
-		fmt.Println("Error: MongoDB is not connected")
+		fmt.Println("Error MongoDB NOT connected")
 		return
 	}
 
-	// Подключение к коллекции "categories"
-	categoriesCollection := client.Database("moto").Collection("categories")
+	// Работа с MongoDB
+	fmt.Println("MongoDB is connected")
+	modelsCollection := client.Database("moto").Collection("categories")
 
-	// URL и параметры для запроса
-	url := "https://motorcycle-specs-database.p.rapidapi.com/category"
-	req, err := http.NewRequest("GET", url, nil)
+	// Используем пустой фильтр для выборки всех документов
+	cursor, err := modelsCollection.Find(context.Background(), bson.M{})
 	if err != nil {
-		http.Error(w, "Failed to create HTTP request", http.StatusInternalServerError)
-		fmt.Println("Error creating HTTP request:", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer cursor.Close(context.Background())
+
+	var models []services.Categories
+	for cursor.Next(context.Background()) {
+		var model services.Categories
+		if err := cursor.Decode(&model); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		models = append(models, model)
+	}
+
+	// Если модели найдены в базе данных, возвращаем их
+	if len(models) > 0 {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(models)
+		fmt.Println("Found models in DB", len(models))
 		return
 	}
 
-	req.Header.Add("x-rapidapi-key", "27e6cce226msha2b9adeeaf9541dp147517jsn4b00793fb267")
-	req.Header.Add("x-rapidapi-host", "motorcycle-specs-database.p.rapidapi.com")
-
-	// Отправка запроса
-	res, err := http.DefaultClient.Do(req)
+	// Если моделей нет, запрашиваем их через внешний API
+	fmt.Println("Models not found in DB, fetching from external API...")
+	externalModels, err := apiClient.FetchCategories()
 	if err != nil {
-		http.Error(w, "Failed to fetch categories from external API", http.StatusInternalServerError)
-		fmt.Println("Error fetching categories:", err)
-		return
-	}
-	defer res.Body.Close()
-
-	// Чтение ответа
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		http.Error(w, "Failed to read API response", http.StatusInternalServerError)
-		fmt.Println("Error reading API response:", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		fmt.Println("Error from api", err)
 		return
 	}
 
-	// Проверка успешного статуса
-	if res.StatusCode != http.StatusOK {
-		http.Error(w, "API returned non-200 status: "+res.Status, http.StatusInternalServerError)
-		fmt.Println("API returned non-200 status:", res.Status)
-		return
-	}
-
-	// Парсинг данных в слайс структур
-	var categories []Categories
-	if err := json.Unmarshal(body, &categories); err != nil {
-		http.Error(w, "Failed to parse API response", http.StatusInternalServerError)
-		fmt.Println("Error parsing API response:", err)
-		return
-	}
-
-	// Сохранение данных в MongoDB
-	for _, category := range categories {
-		_, err := categoriesCollection.InsertOne(context.Background(), category)
+	// Сохраняем новые модели в базу данных
+	for _, model := range externalModels {
+		_, err = modelsCollection.InsertOne(context.Background(), model)
 		if err != nil {
-			fmt.Println("Error saving category to MongoDB:", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			fmt.Println("Error saved models from api", err)
+			return
 		}
 	}
+	fmt.Println("Models saved in DB from external API")
 
-	// Возвращаем данные клиенту
+	// Возвращаем только что добавленные модели
+	cursor, err = modelsCollection.Find(context.Background(), bson.M{})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		fmt.Println("Error только что добавленные модели", err)
+		return
+	}
+	defer cursor.Close(context.Background())
+
+	models = []services.Categories{}
+	for cursor.Next(context.Background()) {
+		var model services.Categories
+		if err := cursor.Decode(&model); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			fmt.Println("Error только что добавленные модели", len(models))
+			return
+		}
+		models = append(models, model)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(categories)
-	fmt.Println("Categories fetched and saved:", len(categories))
+	json.NewEncoder(w).Encode(models)
 }

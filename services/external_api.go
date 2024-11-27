@@ -2,6 +2,7 @@ package services
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,6 +20,11 @@ type MotorcycleImage struct {
 	ID        primitive.ObjectID `bson:"_id,omitempty" json:"-"`
 	ArticleId int                `bson:"articleId" json:"articleId"`
 	Image     string             `bson:"image" json:"image"` // Base64 строка изображения
+}
+
+type Categories struct {
+	Name string `json:"name"`
+	ID   int    `json:"id"`
 }
 
 // NewExternalAPIClient создает нового клиента для внешнего API
@@ -69,4 +75,48 @@ func (client *ExternalAPIClient) FetchMotoImageByArticleID(articleID string) (Mo
 		ArticleId: articleIDInt,
 		Image:     imageBase64,
 	}, nil
+}
+
+func (client *ExternalAPIClient) FetchCategories() ([]Categories, error) {
+
+	// URL и параметры для запроса
+	url := "https://motorcycle-specs-database.p.rapidapi.com/category"
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Добавление заголовков
+	req.Header.Add("x-rapidapi-key", client.APIKey)
+	req.Header.Add("x-rapidapi-host", client.APIHost)
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch categories: %s", res.Status)
+	}
+
+	var models []Categories
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Println("API response categories:", len(body))
+
+	// Пытаемся распарсить ответ как массив объектов MotoModel
+	if err := json.Unmarshal(body, &models); err != nil {
+		fmt.Println("Error parse categories", err)
+		return nil, err
+	}
+
+	fmt.Println("categories parsed", models)
+
+	return models, nil
 }

@@ -219,12 +219,9 @@ func main() {
 
 	// Запуск HTTPS-сервера
 	port := 8181
-	certPath := "/etc/ssl/selfsigned/selfsigned.crt" // Путь к сертификату
-	keyPath := "/etc/ssl/selfsigned/selfsigned.key"  // Путь к приватному ключу
 
-	// Используем ListenAndServeTLS для работы с HTTPS
-	fmt.Printf("Server is running on HTTPS port %d...\n", port)
-	log.Fatal(http.ListenAndServeTLS(fmt.Sprintf(":%d", port), certPath, keyPath, nil))
+	fmt.Printf("Server is running on HTTP port %d...\n", port)
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", port), nil))
 }
 
 // Получение списка марок

@@ -259,7 +259,7 @@ func getMotorcycleBrands(w http.ResponseWriter, r *http.Request) {
 
 	// Если данные найдены в базе, возвращаем их
 	if len(brands) > 0 {
-		fmt.Println("Brands fetched from database:", brands)
+		fmt.Println("Brands fetched from database:")
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(brands)
 		return
@@ -279,6 +279,7 @@ func getMotorcycleBrands(w http.ResponseWriter, r *http.Request) {
 	err = json.NewDecoder(file).Decode(&brands)
 	if err != nil {
 		http.Error(w, "Error decoding JSON file: "+err.Error(), http.StatusInternalServerError)
+		fmt.Println("Error decoding JSON file:")
 		return
 	}
 
@@ -287,11 +288,12 @@ func getMotorcycleBrands(w http.ResponseWriter, r *http.Request) {
 		_, err := collection.InsertOne(context.TODO(), brand)
 		if err != nil {
 			http.Error(w, "Error inserting data into database: "+err.Error(), http.StatusInternalServerError)
+			fmt.Println("Error inserting data into database:")
 			return
 		}
 	}
 
-	fmt.Println("Brands loaded from JSON and inserted into database:", brands)
+	fmt.Println("Brands loaded from JSON and inserted into database:")
 
 	// Возвращаем данные клиенту
 	w.Header().Set("Content-Type", "application/json")

@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"go-mongodb-app/services"
+	"image"
 	"io"
 	"log"
 	"net/http"
@@ -24,8 +27,8 @@ import (
 )
 
 const (
-	// RapidAPIKey  = "756a143d30msh385f180af869e40p1a22fajsnfdc87cc5b091" - истек 13 ноября
-	RapidAPIKey  = "0733ded29bmsh801be1ca43be318p1d2354jsn79b439390958"
+	// RapidAPIKey = "756a143d30msh385f180af869e40p1a22fajsnfdc87cc5b091"
+	RapidAPIKey  = "27e6cce226msha2b9adeeaf9541dp147517jsn4b00793fb267"
 	RapidAPIHost = "motorcycle-specs-database.p.rapidapi.com"
 )
 
@@ -214,6 +217,10 @@ func main() {
 		getMotorcycleCategories(w, r, externalAPIClient)
 	})
 
+	http.HandleFunc("/models-by-categories", func(w http.ResponseWriter, r *http.Request) {
+		getModelsByCategories(w, r, externalAPIClient)
+	})
+
 	// Запуск HTTPS-сервера
 	port := 8181
 
@@ -235,6 +242,7 @@ func getMotorcycleBrands(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database query failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
 	defer cur.Close(context.TODO())
 
 	// Чтение данных из базы
@@ -245,6 +253,7 @@ func getMotorcycleBrands(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Error decoding document: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
+
 		brands = append(brands, brand)
 	}
 
@@ -264,6 +273,7 @@ func getMotorcycleBrands(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error opening JSON file: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
 	defer file.Close()
 
 	err = json.NewDecoder(file).Decode(&brands)
@@ -768,6 +778,70 @@ func mapToStruct(input map[string]interface{}, output interface{}) error {
 	return nil
 }
 
+// func getImageByArticleID(w http.ResponseWriter, r *http.Request, apiClient *services.ExternalAPIClient) {
+// 	if client == nil {
+// 		http.Error(w, "MongoDB connection is not initialized", http.StatusInternalServerError)
+// 		return
+// 	}
+
+// 	// Получаем параметр articleId из запроса
+// 	articleIDStr := r.URL.Query().Get("articleId")
+// 	if articleIDStr == "" {
+// 		http.Error(w, "Required parameter 'articleId' is missing", http.StatusBadRequest)
+// 		fmt.Println("article parameter is missing -------")
+// 		return
+// 	}
+
+// 	fmt.Println("articleIDStr:", articleIDStr)
+
+// 	// Преобразуем articleId из строки в число
+// 	articleID, err := strconv.Atoi(articleIDStr)
+// 	if err != nil {
+// 		http.Error(w, "Invalid articleId parameter", http.StatusBadRequest)
+// 		fmt.Println("article converted to int error -------")
+// 		return
+// 	}
+// 	fmt.Println("article converted to int:", articleID)
+
+// 	// Конструируем фильтр для поиска по articleId
+// 	filter := bson.M{"articleId": articleID}
+
+// 	// Определяем коллекцию
+// 	motorcyclesCollection := client.Database("moto").Collection("motorcyclesImages")
+
+// 	// Ищем запись в базе данных
+// 	var motoImage services.MotorcycleImage
+// 	err = motorcyclesCollection.FindOne(context.Background(), filter).Decode(&motoImage)
+// 	if err != nil {
+// 		if err == mongo.ErrNoDocuments {
+// 			fmt.Println("article Если запись не найдена, вызываем внешний сервис для получения изображения", articleID)
+// 			// Если запись не найдена, вызываем внешний сервис для получения изображения
+// 			motoImage, err = apiClient.FetchMotoImageByArticleID(articleIDStr)
+// 			if err != nil {
+// 				http.Error(w, "Failed to fetch image from external API", http.StatusInternalServerError)
+// 				fmt.Println("Failed to fetch image from external API", http.StatusInternalServerError)
+// 				return
+// 			}
+
+// 			// Сохраняем изображение в базу данных
+// 			_, err := motorcyclesCollection.InsertOne(context.Background(), motoImage)
+// 			if err != nil {
+// 				http.Error(w, "Failed to save image to the database", http.StatusInternalServerError)
+// 				fmt.Println("Failed to save image to the database")
+// 				return
+// 			}
+// 		} else {
+// 			http.Error(w, err.Error(), http.StatusInternalServerError)
+// 			return
+// 		}
+// 	}
+
+// 	// Возвращаем модель с изображением в формате JSON
+// 	fmt.Println("модель с изображением", motoImage)
+// 	w.Header().Set("Content-Type", "application/json")
+// 	json.NewEncoder(w).Encode(motoImage)
+// }
+
 func getImageByArticleID(w http.ResponseWriter, r *http.Request, apiClient *services.ExternalAPIClient) {
 	if client == nil {
 		http.Error(w, "MongoDB connection is not initialized", http.StatusInternalServerError)
@@ -809,7 +883,14 @@ func getImageByArticleID(w http.ResponseWriter, r *http.Request, apiClient *serv
 			motoImage, err = apiClient.FetchMotoImageByArticleID(articleIDStr)
 			if err != nil {
 				http.Error(w, "Failed to fetch image from external API", http.StatusInternalServerError)
-				fmt.Println("Failed to fetch image from external API", http.StatusInternalServerError)
+				fmt.Println("Failed to fetch image from external API")
+				return
+			}
+
+			// Проверяем валидность поля Image
+			if !isValidBase64Image(motoImage.Image) {
+				http.Error(w, "Invalid image data from external API", http.StatusInternalServerError)
+				fmt.Println("Invalid image data from external API")
 				return
 			}
 
@@ -830,6 +911,25 @@ func getImageByArticleID(w http.ResponseWriter, r *http.Request, apiClient *serv
 	fmt.Println("модель с изображением", motoImage)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(motoImage)
+}
+
+// Проверяет, является ли строка Image валидным изображением
+func isValidBase64Image(base64Str string) bool {
+	// Декодируем строку base64
+	data, err := base64.StdEncoding.DecodeString(base64Str)
+	if err != nil {
+		fmt.Println("Base64 decode error:", err)
+		return false
+	}
+
+	// Пробуем определить формат изображения
+	_, _, err = image.Decode(bytes.NewReader(data))
+	if err != nil {
+		fmt.Println("Image decode error:", err)
+		return false
+	}
+
+	return true
 }
 
 func getMotorcycleCategories(w http.ResponseWriter, r *http.Request, apiClient *services.ExternalAPIClient) {
@@ -909,6 +1009,125 @@ func getMotorcycleCategories(w http.ResponseWriter, r *http.Request, apiClient *
 		models = append(models, model)
 	}
 
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(models)
+}
+
+func getModelsByCategories(w http.ResponseWriter, r *http.Request, apiClient *services.ExternalAPIClient) {
+
+	if client == nil {
+		http.Error(w, "MongoDB connection is not initialized", http.StatusInternalServerError)
+		return
+	}
+
+	// Получаем параметры из запроса
+	category := r.URL.Query().Get("category")
+
+	// Получаем параметр articleId из запроса
+	makenameStr := r.URL.Query().Get("makename")
+	if makenameStr == "" {
+		http.Error(w, "Required parameter 'makenameStr' is missing", http.StatusBadRequest)
+		fmt.Println("makenameStr parameter is missing -------")
+		return
+	}
+
+	fmt.Println("makenameStr:", makenameStr)
+
+	// Преобразуем articleId из строки в число
+	make, err := strconv.Atoi(makenameStr)
+	if err != nil {
+		http.Error(w, "Invalid makenameStr parameter", http.StatusBadRequest)
+		fmt.Println("makename converted to int error -------")
+		return
+	}
+	fmt.Println("makeName converted to int:", make)
+
+	if category == "" {
+		http.Error(w, "makeName and category are required parameters", http.StatusBadRequest)
+		return
+	}
+
+	// filter := bson.M{"categoryname": category}
+	// filter = bson.M{"identificator": makenameStr}
+
+	filter := bson.M{
+		"$and": []bson.M{
+			{"categoryname": bson.M{"$regex": category, "$options": "i"}},
+			{"identificator": makenameStr},
+		},
+	}
+
+	log.Printf("Filter: %+v", filter)
+
+	// Указываем коллекцию
+	motorcyclesCollection := client.Database("moto").Collection("modelsbyCategories")
+
+	// Функция для поиска в базе данных
+	findInDatabase := func() ([]services.ModelWithCategory, error) {
+		cursor, err := motorcyclesCollection.Find(context.Background(), filter)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query database: %w", err)
+		}
+		defer cursor.Close(context.Background())
+
+		var models []services.ModelWithCategory
+		for cursor.Next(context.Background()) {
+			var model services.ModelWithCategory
+			if err := cursor.Decode(&model); err != nil {
+				return nil, fmt.Errorf("failed to decode database result: %w", err)
+			}
+			models = append(models, model)
+		}
+		return models, nil
+	}
+
+	// 1. Ищем в базе данных
+	models, err := findInDatabase()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 2. Если модели найдены, возвращаем их
+	if len(models) > 0 {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(models)
+		fmt.Println("parsing models:", models)
+		return
+	}
+
+	fmt.Println("BD models by categories: - ничего не найдено, вызываем внешний API")
+	// 3. Если ничего не найдено, вызываем внешний API
+	externalModels, err := apiClient.FetchModelByCategories(category, makenameStr)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to fetch data from API: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// 4. Сохраняем результат внешнего API в базу
+	for _, model := range externalModels {
+		// Преобразуем структуру в BSON перед сохранением
+		bsonData, err := bson.Marshal(model)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("failed to marshal model: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		_, err = motorcyclesCollection.InsertOne(context.Background(), bsonData)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("failed to save model to database: %v", err), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// 5. Снова ищем в базе данных после вставки
+	models, err = findInDatabase()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 6. Возвращаем данные, если они найдены, или пустой массив в противном случае
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(models)
 }

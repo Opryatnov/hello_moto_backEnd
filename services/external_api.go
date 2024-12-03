@@ -27,6 +27,16 @@ type Categories struct {
 	ID   int    `json:"id"`
 }
 
+type ModelWithCategory struct {
+	ArticleID     *int    `json:"articleId,omitempty"`
+	ModelID       *int    `json:"modelId,omitempty"`
+	PriceName     *string `json:"priceName,omitempty"`
+	ModelName     *string `json:"modelName,omitempty"`
+	CategoryName  *string `json:"categoryName,omitempty"`
+	YearName      *int    `json:"yearName,omitempty"`
+	Identificator string  `json:"identificator"`
+}
+
 // NewExternalAPIClient создает нового клиента для внешнего API
 func NewExternalAPIClient(apiKey, apiHost string) *ExternalAPIClient {
 	return &ExternalAPIClient{
@@ -117,6 +127,57 @@ func (client *ExternalAPIClient) FetchCategories() ([]Categories, error) {
 	}
 
 	fmt.Println("categories parsed", models)
+
+	return models, nil
+}
+
+func (client *ExternalAPIClient) FetchModelByCategories(category string, makeId string) ([]ModelWithCategory, error) {
+	// URL и параметры для запроса
+	url := fmt.Sprintf("https://motorcycle-specs-database.p.rapidapi.com/model/make-id/%s/category/%s", makeId, category)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		fmt.Println("Error req 0", err)
+		return nil, err
+	}
+
+	// Добавление заголовков
+	req.Header.Add("x-rapidapi-key", client.APIKey)
+	req.Header.Add("x-rapidapi-host", client.APIHost)
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		fmt.Println("Error req 1", err)
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		fmt.Println("Error req 2", err)
+		return nil, fmt.Errorf("failed to fetch ModelWithCategory: %s", res.Status)
+	}
+
+	var models []ModelWithCategory
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		fmt.Println("Error body", res.Body)
+		return nil, err
+	}
+
+	fmt.Println("API response ModelWithCategory:", len(body))
+
+	// Пытаемся распарсить ответ как массив объектов MotoModel
+	if err := json.Unmarshal(body, &models); err != nil {
+		fmt.Println("Error parse ModelWithCategory", err)
+		return nil, err
+	}
+
+	for i := range models {
+		models[i].Identificator = makeId
+	}
+
+	fmt.Println("ModelWithCategory parsed", models)
 
 	return models, nil
 }

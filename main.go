@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	RapidAPIKey = "756a143d30msh385f180af869e40p1a22fajsnfdc87cc5b091"
+	RapidAPIKey = "74fc962479msh9490d24b9a87303p177743jsn398e5ee49b52"
 	// RapidAPIKey  = "27e6cce226msha2b9adeeaf9541dp147517jsn4b00793fb267" - протух
 	RapidAPIHost = "motorcycle-specs-database.p.rapidapi.com"
 )
@@ -452,6 +452,8 @@ func getMotorcycleDetails(w http.ResponseWriter, r *http.Request) {
 		TempIdentifier string `json:"tempIdentifier"`
 	}
 
+	log.Printf("tempIdentifier:")
+
 	var requestBody RequestBody
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -578,6 +580,9 @@ func getmotorcyclesSpecifications(w http.ResponseWriter, r *http.Request) {
 	// Получаем параметры из запроса
 	makename := r.URL.Query().Get("makeName")
 	modelname := r.URL.Query().Get("modelName")
+
+	log.Printf("makename:", makename)
+	log.Printf("modelname:", modelname)
 
 	if makename == "" || modelname == "" {
 		http.Error(w, "makeName and modelName are required parameters", http.StatusBadRequest)
@@ -889,12 +894,12 @@ func getImageByArticleID(w http.ResponseWriter, r *http.Request, apiClient *serv
 				return
 			}
 
-			// Проверяем валидность поля Image
-			if !isValidBase64Image(motoImage.Image) {
-				http.Error(w, "Invalid image data from external API", http.StatusInternalServerError)
-				fmt.Println("Invalid image data from external API")
-				return
-			}
+			// // Проверяем валидность поля Image
+			// if !isValidBase64Image(motoImage.Image) {
+			// 	http.Error(w, "Invalid image data from external API", http.StatusInternalServerError)
+			// 	fmt.Println("Invalid image data from external API")
+			// 	return
+			// }
 
 			// Сохраняем изображение в базу данных
 			_, err := motorcyclesCollection.InsertOne(context.Background(), motoImage)
@@ -917,17 +922,38 @@ func getImageByArticleID(w http.ResponseWriter, r *http.Request, apiClient *serv
 
 // Проверяет, является ли строка Image валидным изображением
 func isValidBase64Image(base64Str string) bool {
-	// Декодируем строку base64
-	data, err := base64.StdEncoding.DecodeString(base64Str)
-	if err != nil {
-		fmt.Println("Base64 decode error:", err)
+	// Убираем пробелы и новые строки
+	base64Str = strings.TrimSpace(base64Str)
+
+	// Минимальная длина Base64 строки (например, пустые или короткие строки сразу исключаем)
+	if len(base64Str) < 20 {
+		fmt.Println("Base64 string too short to be valid:", base64Str)
 		return false
 	}
 
+	// Декодируем строку Base64
+	data, err := base64.StdEncoding.DecodeString(base64Str)
+	if err != nil {
+		// Пробуем URL-safe декодирование, если стандартное не подходит
+
+		fmt.Println("Base64:", base64Str)
+		data, err = base64.URLEncoding.DecodeString(base64Str)
+		if err != nil {
+			fmt.Println("Base64 decode error:", err)
+			return false
+		}
+	}
+
 	// Пробуем определить формат изображения
-	_, _, err = image.Decode(bytes.NewReader(data))
+	_, format, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		fmt.Println("Image decode error:", err)
+		return false
+	}
+
+	// Проверяем, является ли формат поддерживаемым
+	fmt.Println("Image format detected:", format)
+	if format == "" {
 		return false
 	}
 

@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	RapidAPIKey = "ff280d182dmsh078033e8c7624d0p18ffcajsn311eea2c7ae2"
+	RapidAPIKey = "c53c2b0acdmshdfa16492af64574p171587jsn0a84a41a21ea"
 	// RapidAPIKey  = "27e6cce226msha2b9adeeaf9541dp147517jsn4b00793fb267" - протух
 	RapidAPIHost = "motorcycle-specs-database.p.rapidapi.com"
 )

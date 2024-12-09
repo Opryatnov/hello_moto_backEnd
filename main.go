@@ -581,21 +581,23 @@ func getmotorcyclesSpecifications(w http.ResponseWriter, r *http.Request) {
 	makename := r.URL.Query().Get("makeName")
 	modelname := r.URL.Query().Get("modelName")
 
-	log.Printf("makename:", makename)
-	log.Printf("modelname:", modelname)
+	log.Printf("Request parameters - makename: %v, modelname: %v", makename, modelname)
 
 	if makename == "" || modelname == "" {
 		http.Error(w, "makeName and modelName are required parameters", http.StatusBadRequest)
 		return
 	}
 
-	// Формируем фильтр для поиска
+	// Экранируем специальные символы в modelname для использования в регулярных выражениях
+	escapedModelName := escapeRegexString(modelname)
+
+	// Формируем фильтр для поиска с экранированным modelname
 	filter := bson.M{
 		"articlecompleteinfo.makename":  bson.M{"$regex": makename, "$options": "i"},
-		"articlecompleteinfo.modelname": bson.M{"$regex": modelname, "$options": "i"},
+		"articlecompleteinfo.modelname": bson.M{"$regex": escapedModelName, "$options": "i"},
 	}
 
-	log.Printf("Filter: %+v", filter)
+	log.Printf("MongoDB Filter: %+v", filter)
 
 	// Указываем коллекцию
 	motorcyclesCollection := client.Database("moto").Collection("motorcyclesDetails")
@@ -630,11 +632,9 @@ func getmotorcyclesSpecifications(w http.ResponseWriter, r *http.Request) {
 	if len(motorcycleSpecifications) > 0 {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(motorcycleSpecifications)
-		fmt.Println("parsing ArticleCompleteInfo:", motorcycleSpecifications)
 		return
 	}
 
-	fmt.Println("parsing ArticleCompleteInfo: - ничего не найдено, вызываем внешний API")
 	// 3. Если ничего не найдено, вызываем внешний API
 	externalModels, err := fetchMotoModelsFromAPI(makename, modelname)
 	if err != nil {
@@ -668,6 +668,19 @@ func getmotorcyclesSpecifications(w http.ResponseWriter, r *http.Request) {
 	// 6. Возвращаем данные, если они найдены, или пустой массив в противном случае
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(motorcycleSpecifications)
+}
+func escapeRegexString(input string) string {
+
+	log.Printf("input -----------------: %s", input)
+	// Экранируем специальные символы, такие как '(', ')', '#', и любые другие, если нужно
+	escaped := strings.ReplaceAll(input, `\`, `\\`)  // Экранируем обратную косую черту
+	escaped = strings.ReplaceAll(escaped, `#`, `\#`) // Экранируем символ '#'
+	escaped = strings.ReplaceAll(escaped, `(`, `\(`) // Экранируем открывающую скобку
+	escaped = strings.ReplaceAll(escaped, `)`, `\)`) // Экранируем закрывающую скобку
+
+	// Можно добавить другие символы, если они могут вызвать проблемы, например, '.', '[', ']', и т.д.
+
+	return escaped
 }
 
 func fetchMotoModelsFromAPI(make, model string) ([]MotorcycleSpecification, error) {

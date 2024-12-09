@@ -37,6 +37,13 @@ type ModelWithCategory struct {
 	Identificator string  `json:"identificator"`
 }
 
+// modelId:2717
+// modelName:"Daystar 125 FI"
+// yearName:2011
+// categoryName:"Sport"
+// priceName:" Euro 2990. Prices depend on country, taxes, accessories, etc."
+// articleId:200985
+
 // NewExternalAPIClient создает нового клиента для внешнего API
 func NewExternalAPIClient(apiKey, apiHost string) *ExternalAPIClient {
 	return &ExternalAPIClient{
@@ -141,6 +148,8 @@ func (client *ExternalAPIClient) FetchModelByCategories(category string, makeId 
 		return nil, err
 	}
 
+	fmt.Println("категория: %s, makeID: %s ", category, makeId)
+
 	// Добавление заголовков
 	req.Header.Add("x-rapidapi-key", client.APIKey)
 	req.Header.Add("x-rapidapi-host", client.APIHost)
@@ -169,7 +178,7 @@ func (client *ExternalAPIClient) FetchModelByCategories(category string, makeId 
 
 	// Пытаемся распарсить ответ как массив объектов MotoModel
 	if err := json.Unmarshal(body, &models); err != nil {
-		fmt.Println("Error parse ModelWithCategory", err)
+		fmt.Println("Error parse ModelWithCategory", err, body)
 		return nil, err
 	}
 

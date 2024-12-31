@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -570,6 +571,10 @@ func getValue(v *string) string {
 	return *v
 }
 
+func EscapeMongoRegex(input string) string {
+	return regexp.QuoteMeta(input)
+}
+
 func getmotorcyclesSpecifications(w http.ResponseWriter, r *http.Request) {
 
 	if client == nil {
@@ -581,23 +586,29 @@ func getmotorcyclesSpecifications(w http.ResponseWriter, r *http.Request) {
 	makename := r.URL.Query().Get("makeName")
 	modelname := r.URL.Query().Get("modelName")
 
-	log.Printf("Request parameters - makename: %v, modelname: %v", makename, modelname)
-
-	if makename == "" || modelname == "" {
-		http.Error(w, "makeName and modelName are required parameters", http.StatusBadRequest)
-		return
+	// Декодируем параметры
+	decodedMakeName, err := url.QueryUnescape(makename)
+	if err != nil {
+		log.Printf("Error decoding makeName: %v", err)
+		decodedMakeName = makename // используем оригинал, если ошибка
 	}
 
-	// Экранируем специальные символы в modelname для использования в регулярных выражениях
-	escapedModelName := escapeRegexString(modelname)
+	decodedModelName, err := url.QueryUnescape(modelname)
+	if err != nil {
+		log.Printf("Error decoding modelName: %v", err)
+		decodedModelName = modelname // используем оригинал, если ошибка
+	}
 
-	// Формируем фильтр для поиска с экранированным modelname
+	// Экранируем modelname для безопасного использования в MongoDB фильтре
+	escapedModelName := EscapeMongoRegex(decodedModelName)
+
+	// Формируем фильтр для MongoDB
 	filter := bson.M{
-		"articlecompleteinfo.makename":  bson.M{"$regex": makename, "$options": "i"},
-		"articlecompleteinfo.modelname": bson.M{"$regex": escapedModelName, "$options": "i"},
+		"articlecompleteinfo.makename":  bson.M{"$regex": decodedMakeName, "$options": "i"},
+		"articlecompleteinfo.modelname": bson.M{"$regex": "^" + escapedModelName + "$", "$options": "i"},
 	}
 
-	log.Printf("MongoDB Filter: %+v", filter)
+	log.Printf("Final MongoDB Filter: %+v", filter)
 
 	// Указываем коллекцию
 	motorcyclesCollection := client.Database("moto").Collection("motorcyclesDetails")
@@ -643,20 +654,27 @@ func getmotorcyclesSpecifications(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 4. Сохраняем результат внешнего API в базу
+
+	log.Printf("Сохраняем результат внешнего API в базу -----------------: %s", externalModels)
+
 	for _, model := range externalModels {
 		// Преобразуем структуру в BSON перед сохранением
 		bsonData, err := bson.Marshal(model)
 		if err != nil {
+			log.Printf("failed to marshal model: %v", err)
 			http.Error(w, fmt.Sprintf("failed to marshal model: %v", err), http.StatusInternalServerError)
 			return
 		}
 
 		_, err = motorcyclesCollection.InsertOne(context.Background(), bsonData)
 		if err != nil {
+			log.Printf("failed to save model to database: %v", err)
 			http.Error(w, fmt.Sprintf("failed to save model to database: %v", err), http.StatusInternalServerError)
 			return
 		}
 	}
+
+	log.Printf("Снова ищем в базе данных после вставки -----------------: %s", motorcycleSpecifications)
 
 	// 5. Снова ищем в базе данных после вставки
 	motorcycleSpecifications, err = findInDatabase()
@@ -665,9 +683,12 @@ func getmotorcyclesSpecifications(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("Показываем что нашли -----------------: %s", motorcycleSpecifications)
+
 	// 6. Возвращаем данные, если они найдены, или пустой массив в противном случае
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(motorcycleSpecifications)
+	log.Printf("Возвращаем данные, если они найдены, или пустой массив в противном случае -----------------: %s", motorcycleSpecifications)
 }
 func escapeRegexString(input string) string {
 
@@ -687,7 +708,10 @@ func fetchMotoModelsFromAPI(make, model string) ([]MotorcycleSpecification, erro
 	// Формирование URL
 	escapedMake := url.PathEscape(make)
 	escapedModel := strings.ReplaceAll(model, " ", "%20")
+
 	url := fmt.Sprintf("https://motorcycle-specs-database.p.rapidapi.com/make/%s/model/%s", escapedMake, escapedModel)
+
+	fmt.Println("Generated URL:", url)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {

@@ -168,6 +168,12 @@ type MotorcycleModel struct {
 	MakeID    string             `bson:"_makeid,omitempty" json:"-"`
 }
 
+type ScreenOpenCount struct {
+	OpenBrandsScreenCount    int `json:"openBrandsScreenCount"`
+	OpenModelsScreenCount    int `json:"openModelsScreenCount"`
+	OpenModelListScreenCount int `json:"openModelListScreenCount"`
+}
+
 var collection *mongo.Collection
 var client *mongo.Client
 
@@ -208,6 +214,7 @@ func main() {
 	http.HandleFunc("/get-motorcycle-details", getMotorcycleDetails)
 	http.HandleFunc("/save-and-fetch-motorcycle-details", saveAndFetchMotorcycleDetails)
 	http.HandleFunc("/motorcycles-details", getmotorcyclesSpecifications)
+	http.HandleFunc("/screen-open-count", getScreenOpenCount)
 
 	// Обработчик для получения изображения
 	http.HandleFunc("/motorcycle-image", func(w http.ResponseWriter, r *http.Request) {
@@ -227,6 +234,30 @@ func main() {
 
 	fmt.Printf("Server is running on HTTP port %d...\n", port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", port), nil))
+}
+
+// Получение количества открытий экрана перед показом рекламы
+func getScreenOpenCount(w http.ResponseWriter, r *http.Request) {
+	// Пример данных (вы можете получить их из базы данных или другой логики)
+
+	fmt.Println("getScreenOpenCount method is called")
+
+	response := ScreenOpenCount{
+		OpenBrandsScreenCount:    9,
+		OpenModelsScreenCount:    11,
+		OpenModelListScreenCount: 15,
+	}
+
+	fmt.Println("getScreenOpenCount returned model", response)
+
+	// Устанавливаем заголовок ответа как JSON
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	// Кодируем данные в JSON и отправляем клиенту
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }
 
 // Получение списка марок
